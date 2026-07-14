@@ -1,0 +1,8 @@
+venv/
+__pycache__/
+*.pyc
+
+# Video Plan A - besar, tidak ikut di-push (taruh manual di assets/promo.mp4)
+assets/*.mp4
+assets/*.mov
+assets/*.mkv
