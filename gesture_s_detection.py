@@ -358,11 +358,11 @@ class NDVISimulator:
 
     def label(self):
         if self.value < 0.35:
-            return "Tanaman Stres", (0, 60, 255)
+            return "Kritis", (0, 60, 255)
         elif self.value < 0.55:
             return "Perlu Perhatian", (0, 200, 255)
         else:
-            return "Vegetasi Sehat", (0, 220, 100)
+            return "Optimal", (0, 220, 100)
 
 
 class ConnectionManager:
@@ -561,11 +561,11 @@ def draw_smart_agri_panel(frame, ndvi_value, ndvi_label, ndvi_color, is_connecte
     cv2.addWeighted(overlay, 0.75, frame, 0.25, 0, frame)
     cv2.rectangle(frame, (px, py), (px + panel_w, py + panel_h), (200, 200, 200), 1)
 
-    cv2.putText(frame, "SMART AGRICULTURE", (px + 10, py + 20),
+    cv2.putText(frame, "SYSTEM STATUS", (px + 10, py + 20),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
 
-    # NDVI
-    cv2.putText(frame, f"NDVI: {ndvi_value:.2f}", (px + 10, py + 45),
+    # Skor status (data teknisnya tetap NDVI simulasi, wording generik)
+    cv2.putText(frame, f"SKOR: {ndvi_value:.2f}", (px + 10, py + 45),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, ndvi_color, 2)
     cv2.putText(frame, ndvi_label, (px + 10, py + 63),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, ndvi_color, 1)
@@ -633,11 +633,10 @@ def main():
     action_done     = False   # True setelah tombol aksi ditekan (video mulai / lampu nyala)
     video_manual_stop = False  # True kalau video dihentikan manual lewat 's' (jangan auto-play lagi)
 
-    action_label = "VIDEO (Plan A)" if action_mode == "VIDEO" else "LAMPU (Alternatif)"
     print("=== AI Gesture Activation System (Smart Agriculture) ===")
-    print(f"Mode aksi lanjutan sesi ini: {action_label}")
+    print(f"Mode aksi lanjutan sesi ini: {action_mode}  (tekan 'm' kapan saja untuk ganti mode)")
     print(f"Tekan [{ACTION_KEY.upper() if ACTION_KEY != ' ' else 'SPASI'}] untuk jalankan aksi setelah verifikasi 100% & terhubung")
-    print("Tombol lain: 'q' keluar | 'r' reset | 's' stop video | 'v' putar ulang video")
+    print("Tombol lain: 'q' keluar | 'r' reset | 'm' ganti mode Video/Lampu | 's' stop video | 'v' putar ulang video")
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -716,13 +715,14 @@ def main():
                 is_connected, video_status, lamp_on,
             )
 
-        # ── Prompt tombol aksi tunggal (Video ATAU Lampu, sesuai ACTION_MODE) ──
+        # ── Prompt tombol aksi tunggal (Video ATAU Lampu, sesuai action_mode saat ini) ──
+        action_label = "VIDEO (Plan A)" if action_mode == "VIDEO" else "LAMPU (Alternatif)"
         if action_ready:
             key_label = "SPASI" if ACTION_KEY == " " else ACTION_KEY.upper()
-            prompt = f"Tekan [{key_label}] untuk jalankan: {action_label}"
+            prompt = f"Tekan [{key_label}] untuk jalankan: {action_label}   ( 'm' = ganti mode )"
             hh, ww = frame.shape[:2]
-            cv2.putText(frame, prompt, (ww // 2 - 220, hh // 2 + 130),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 255), 2)
+            cv2.putText(frame, prompt, (ww // 2 - 280, hh // 2 + 130),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
 
         cv2.imshow("AI Gesture Activation - Gesture S", frame)
 
@@ -738,6 +738,9 @@ def main():
             action_done = False
             video_manual_stop = False
             print("[RESET] Sistem direset.")
+        elif key == ord('m') and not action_done:
+            action_mode = "LAMPU" if action_mode == "VIDEO" else "VIDEO"
+            print(f"[MODE] Aksi lanjutan diganti ke: {action_mode}")
         elif key == ord(ACTION_KEY) and action_ready:
             # ── Tombol tunggal: jalankan Plan A (video) ATAU Alternatif (lampu), sesuai action_mode ──
             action_done = True
