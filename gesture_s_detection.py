@@ -448,7 +448,11 @@ class VideoPlanA:
             if self.loop:
                 self.player.seek(0, relative=False, accurate=False)
             else:
+                # Tutup player SEGERA begitu eof -> mencegah decoder terus
+                # mengirim frame sisa/rusak di ujung video (efek "ngulang sendiri").
                 self.playing = False
+                self.player.close_player()
+                self.player = None
             return self._last_frame
 
         if frame is not None:
@@ -678,7 +682,10 @@ def main():
             print("[FASE S] Terdeteksi -> menampilkan UI Smart Agriculture (NDVI).")
 
         if phase_s_seen:
-            ndvi.update()
+            if output["state"] == GestureState.DONE:
+                ndvi.value = 1.0  # verifikasi sudah 100% selesai -> skor dikunci, tidak drop lagi
+            else:
+                ndvi.update()
             is_connected = conn.update(now)
         else:
             is_connected = False
@@ -754,7 +761,8 @@ def main():
         elif key == ord('s') and video.started:
             video.stop()
             video_manual_stop = True
-            print("[VIDEO] Dihentikan manual. Tekan 'v' untuk putar ulang dari awal.")
+            action_done = False  # buka lagi aksi lanjutan -> bisa 'm' ganti mode atau tekan aksi ulang
+            print("[VIDEO] Dihentikan manual. Tekan 'm' ganti mode, 'v' putar ulang, atau [SPASI] ulang aksi.")
         elif key == ord('v') and video.available:
             video.stop()
             video.start()
