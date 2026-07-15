@@ -48,8 +48,10 @@ MPD-SAG/
 ├── README.md                    # Dokumen ini (tampil di GitHub)
 ├── README.docx                  # Dokumentasi lengkap versi Word
 ├── .gitignore
-└── assets/
-    └── promo.mp4                # Video Plan A (taruh manual, tidak ikut di-push)
+├── assets/
+│   └── promo.mp4                # Video Plan A (taruh manual, tidak ikut di-push)
+└── firmware/
+    └── esp32-lamp-wokwi/        # Firmware + skema simulasi lampu IoT (ESP32, Wokwi)
 ```
 
 ---
@@ -182,9 +184,12 @@ ACTION_KEY  = " "              # tombol tunggal untuk aksi lanjutan (default: sp
 
 ## Dari Simulasi ke Hardware Nyata
 
-1. **Sekarang (rehearsal):** `CONNECTION_MODE = "SIMULATED"` — bohlam di layar + log console cukup untuk gladi bersih tanpa hardware.
-2. **Level tengah (opsional):** set `CONNECTION_MODE = "MQTT"` dengan `MQTT_BROKER = "test.mosquitto.org"` (broker publik gratis), lalu subscribe topic `smartagri/lampu` dari HP (app **IoT MQTT Panel** / **MyMQTT**) untuk lihat pesan ON/OFF real-time tanpa lampu fisik.
-3. **Hari-H:** ganti `MQTT_BROKER` ke IP ESP32/broker lokal sungguhan. ESP32 tinggal subscribe topic yang sama — payload `"ON"` → relay HIGH, `"OFF"` → LOW. **Tidak ada perubahan kode Python lain yang diperlukan.**
+1. **Sekarang (rehearsal, tanpa hardware sama sekali):** `CONNECTION_MODE = "SIMULATED"` — bohlam di layar + log console cukup untuk gladi bersih.
+2. **Simulasi virtual ESP32 (sebelum beli hardware):** buka [`firmware/esp32-lamp-wokwi/`](./firmware/esp32-lamp-wokwi/) — firmware + skema rangkaian siap pakai di [Wokwi](https://wokwi.com) (simulator ESP32 berbasis browser, gratis). ESP32 virtual ini bisa benar-benar menerima pesan MQTT asli dari `gesture_s_detection.py` lewat broker publik, jadi seluruh alur (gesture → MQTT → relay → lampu) bisa dites end-to-end tanpa punya ESP32/relay/lampu fisik.
+3. **Level tengah (dengan broker publik, masih tanpa hardware sendiri):** set `CONNECTION_MODE = "MQTT"` dengan `MQTT_BROKER = "test.mosquitto.org"` (broker publik gratis), lalu subscribe topic `smartagri/lampu` dari HP (app **IoT MQTT Panel** / **MyMQTT**) untuk lihat pesan ON/OFF real-time.
+4. **Hari-H (hardware asli):** flash firmware yang sama ke ESP32/NodeMCU asli, ganti `MQTT_BROKER` ke broker lokal (mis. Mosquitto di laptop). ESP32 tinggal subscribe topic yang sama — payload `"ON"` → relay HIGH, `"OFF"` → LOW. **Tidak ada perubahan kode Python lain yang diperlukan.**
+
+> **Soal kontrol lampu utama aula:** jangan langsung menyambungkan hardware DIY ke instalasi listrik gedung (AC 220V, sirkuit besar) — itu perlu koordinasi dengan pengelola gedung/teknisi listrik. Untuk demo panggung, lebih realistis bawa lampu/fixture sendiri (LED spotlight kecil, lampu dekorasi DC) yang dikontrol lewat relay — bukan lampu utama ruangan.
 
 ---
 
