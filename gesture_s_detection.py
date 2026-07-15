@@ -498,14 +498,15 @@ FONT = cv2.FONT_HERSHEY_DUPLEX
 
 
 def draw_overlay(frame, system_output, debug_info, show_debug=False):
-    """Header minimalis: state, progress tipis, indikator LED kecil. Tanpa teks instruksi/command."""
+    """Header kecil & simpel: state (putih), progress tipis, satu pill status. Tanpa teks command."""
     h, w = frame.shape[:2]
+    bar_h_area = 52
 
-    # ── Panel atas, flat & translucent ──
+    # ── Panel atas, flat, tipis & translucent ──
     overlay = frame.copy()
-    cv2.rectangle(overlay, (0, 0), (w, 74), (16, 16, 20), -1)
-    cv2.addWeighted(overlay, 0.72, frame, 0.28, 0, frame)
-    cv2.line(frame, (0, 74), (w, 74), (55, 55, 62), 1, cv2.LINE_AA)
+    cv2.rectangle(overlay, (0, 0), (w, bar_h_area), (14, 14, 17), -1)
+    cv2.addWeighted(overlay, 0.68, frame, 0.32, 0, frame)
+    cv2.line(frame, (0, bar_h_area), (w, bar_h_area), (50, 50, 56), 1, cv2.LINE_AA)
 
     state    = system_output["state"]
     progress = system_output["progress"]
@@ -513,30 +514,32 @@ def draw_overlay(frame, system_output, debug_info, show_debug=False):
     message  = system_output["message"]
     color    = STATE_COLORS.get(state, (255, 255, 255))
 
-    cv2.putText(frame, state, (16, 30), FONT, 0.7, color, 1, cv2.LINE_AA)
-    cv2.putText(frame, message, (16, 52), FONT, 0.45, (185, 185, 190), 1, cv2.LINE_AA)
+    # ── Teks putih polos (tanpa warna per-state) ──
+    cv2.putText(frame, state, (14, 22), FONT, 0.58, (245, 245, 245), 1, cv2.LINE_AA)
+    cv2.putText(frame, message, (14, 38), FONT, 0.36, (225, 225, 225), 1, cv2.LINE_AA)
 
-    # ── Progress bar tipis ──
-    bar_x, bar_y, bar_w, bar_h = 16, 62, w - 210, 5
-    cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), (42, 42, 48), -1, cv2.LINE_AA)
+    # ── Satu pill status kecil di kanan atas (gantikan cluster 4-LED) ──
+    pill_w, pill_h = 54, 20
+    px1, py1 = w - 14 - pill_w, 12
+    px2, py2 = px1 + pill_w, py1 + pill_h
+    dot_col  = LED_COLORS.get(led, (90, 90, 90))
+    cv2.rectangle(frame, (px1, py1), (px2, py2), (18, 18, 20), -1, cv2.LINE_AA)
+    cv2.rectangle(frame, (px1, py1), (px2, py2), (55, 55, 60), 1, cv2.LINE_AA)
+    dot_cx, dot_cy = px1 + 14, (py1 + py2) // 2
+    if led != "OFF":
+        glow = frame.copy()
+        cv2.circle(glow, (dot_cx, dot_cy), 8, dot_col, -1, cv2.LINE_AA)
+        cv2.addWeighted(glow, 0.35, frame, 0.65, 0, frame)
+    cv2.circle(frame, (dot_cx, dot_cy), 4, dot_col, -1, cv2.LINE_AA)
+    cv2.putText(frame, f"{progress:.0f}%", (px1 + 24, py1 + 14), FONT, 0.36, (235, 235, 235), 1, cv2.LINE_AA)
+
+    # ── Progress bar tipis, sisakan ruang buat pill di kanan ──
+    bar_x, bar_y, bar_h = 14, 46, 3
+    bar_w = px1 - 14 - 10
+    cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), (40, 40, 45), -1, cv2.LINE_AA)
     fill = int(bar_w * progress / 100)
     if fill > 0:
         cv2.rectangle(frame, (bar_x, bar_y), (bar_x + fill, bar_y + bar_h), color, -1, cv2.LINE_AA)
-    cv2.putText(frame, f"{progress:.0f}%", (bar_x + bar_w + 10, bar_y + 9),
-                FONT, 0.4, (185, 185, 190), 1, cv2.LINE_AA)
-
-    # ── Indikator LED — titik kecil dengan glow lembut saat aktif ──
-    led_keys = ["GREEN", "BLUE", "YELLOW", "RED"]
-    led_cx_start = w - 150
-    for i, key in enumerate(led_keys):
-        cx, cy = led_cx_start + i * 34, 28
-        active = (led == key)
-        col = LED_COLORS[key] if active else (50, 50, 56)
-        if active:
-            glow = frame.copy()
-            cv2.circle(glow, (cx, cy), 10, col, -1, cv2.LINE_AA)
-            cv2.addWeighted(glow, 0.35, frame, 0.65, 0, frame)
-        cv2.circle(frame, (cx, cy), 5, col, -1, cv2.LINE_AA)
 
     # ── Info debug (opsional, toggle via tombol 'd' saat rehearsal) ──
     if show_debug and debug_info and "total_score" in debug_info:
@@ -555,7 +558,7 @@ def draw_smart_agri_panel(frame, ndvi_value, ndvi_label, ndvi_color, is_connecte
     """Panel status ringkas: skor, koneksi, video, lampu (FR-02, FR-03). Tanpa teks command."""
     h, w = frame.shape[:2]
     panel_w, panel_h = 216, 148
-    px, py = w - panel_w - 14, 90
+    px, py = w - panel_w - 14, 64
 
     # Kartu dengan sudut membulat semu (radius kecil di tiap pojok)
     overlay = frame.copy()
@@ -706,27 +709,29 @@ def main():
                 else:  # "background": video + data transparan
                     frame = cv2.addWeighted(frame, 0.35, vframe, 0.65, 0)
 
-        # ── Overlay visual utama (state/progress/LED) ──
-        frame = draw_overlay(frame, output, debug_info, show_debug=show_debug)
+        # ── Video sedang aktif diputar -> layar dibiarkan bersih total, tanpa toolbar ──
+        video_is_playing_now = video.started and video.playing
 
-        # ── Panel Smart Agriculture (NDVI, koneksi, Plan A/Alternatif) ──
-        if phase_s_seen:
-            label, ndvi_col = ndvi.label()
-            if video.started and video.playing:
-                video_status = "ON"
-            elif video_manual_stop:
-                video_status = "DIHENTIKAN"
-            elif video.started and not video.playing:
-                video_status = "SELESAI"
-            else:
-                video_status = "-"
-            frame = draw_smart_agri_panel(
-                frame, ndvi.value, label, ndvi_col,
-                is_connected, video_status, lamp_on,
-            )
+        if not video_is_playing_now:
+            # ── Overlay visual utama (state/progress/status) ──
+            frame = draw_overlay(frame, output, debug_info, show_debug=show_debug)
+
+            # ── Panel status (skor, koneksi, video, lampu) ──
+            if phase_s_seen:
+                label, ndvi_col = ndvi.label()
+                if video_manual_stop:
+                    video_status = "DIHENTIKAN"
+                elif video.started and not video.playing:
+                    video_status = "SELESAI"
+                else:
+                    video_status = "-"
+                frame = draw_smart_agri_panel(
+                    frame, ndvi.value, label, ndvi_col,
+                    is_connected, video_status, lamp_on,
+                )
 
         # ── Indikator "siap" — pill minimal berdenyut, tanpa nama tombol/perintah ──
-        if action_ready:
+        if not video_is_playing_now and action_ready:
             pulse   = 0.5 + 0.5 * math.sin(time.time() * 3.0)
             badge_c = (0, int(200 + 55 * pulse), 180)
             hh, ww  = frame.shape[:2]
