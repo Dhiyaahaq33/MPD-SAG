@@ -16,6 +16,7 @@ Dokumentasi lengkap versi `.docx` juga tersedia di [`README.docx`](./README.docx
 - [Cara Menjalankan](#cara-menjalankan)
 - [Cara Membentuk Gesture "S"](#cara-membentuk-gesture-s)
 - [Alur Sistem (Sesuai PRD)](#alur-sistem-sesuai-prd)
+- [Tampilan UI](#tampilan-ui)
 - [Kontrol Keyboard](#kontrol-keyboard)
 - [Konfigurasi Penting](#konfigurasi-penting)
 - [Dari Simulasi ke Hardware Nyata](#dari-simulasi-ke-hardware-nyata)
@@ -29,11 +30,12 @@ Dokumentasi lengkap versi `.docx` juga tersedia di [`README.docx`](./README.docx
 | Modul | Fungsi |
 |---|---|
 | **Deteksi Gesture** | MediaPipe Hands melacak 21 landmark per tangan, mengklasifikasikan bentuk "C" (kiri) dan "C terbalik" (kanan), lalu memvalidasi posisi relatif membentuk huruf "S". |
-| **State Machine** | `IDLE → VERIFY (2 detik) → ACTIVATE (progress 0–100% selama 5 detik) → DONE`, dengan progress bar dan 4 indikator LED (GREEN/BLUE/YELLOW/RED). |
-| **NDVI Panel** | Simulasi nilai vegetasi (0.2–0.9, random-walk) + label status kesehatan tanaman, tampil begitu "Fase S" terdeteksi. |
+| **State Machine** | `IDLE → VERIFY (2 detik) → ACTIVATE (progress 0–100% selama 5 detik) → DONE`, dengan progress bar tipis dan satu pill status kecil (dot warna + persentase) di header. |
+| **Skor Status** | Simulasi nilai (0.2–0.9, random-walk), otomatis terkunci di **1.00 ("Optimal")** begitu verifikasi mencapai `DONE`. |
 | **Status Koneksi** | `ConnectionManager` — mode `SIMULATED` (default, aman tanpa hardware) atau `MQTT` (broker/ESP32 nyata). |
-| **Plan A (Video)** | Autoplay video promo dengan audio sinkron (`ffpyplayer`), mode `fullscreen` atau `background`, berhenti di frame terakhir (tidak loop). |
-| **Alternatif (Lampu IoT)** | Kirim perintah ON/OFF ke node lampu/relay via MQTT (`paho-mqtt`) atau simulasi (bohlam visual di layar). |
+| **Plan A (Video)** | Autoplay video promo dengan audio sinkron (`ffpyplayer`), mode `fullscreen` (default, penuh) atau `background`, berhenti bersih di frame terakhir (tidak loop, tidak stutter). |
+| **Alternatif (Lampu IoT)** | Kirim perintah ON/OFF ke node lampu/relay via MQTT (`paho-mqtt`) atau simulasi (log + pill status di layar). |
+| **UI Tampilan** | Minimal & bersih — tanpa teks perintah/tombol di layar, toolbar disembunyikan total selagi video Plan A diputar. Lihat [Tampilan UI](#tampilan-ui). |
 
 ---
 
@@ -119,19 +121,37 @@ flowchart TD
 - **FR-04 (Video Module)** — Plan A: autoplay + audio, mode background/fullscreen, tidak loop otomatis.
 - **FR-05 (IoT Hardware Control)** — Alternatif: instruksi ON/OFF ke lampu via MQTT.
 
-> PRD aslinya menyebut Plan A dan Alternatif sebagai **dua skenario pilihan (OR)**, bukan berurutan. Implementasi ini mengikuti itu — satu tombol (SPASI) menjalankan **salah satu**, sesuai mode yang dipilih di awal sesi.
+> PRD aslinya menyebut Plan A dan Alternatif sebagai **dua skenario pilihan (OR)**, bukan berurutan. Implementasi ini mengikuti itu — satu tombol (SPASI) menjalankan **salah satu**, sesuai mode yang dipilih di awal sesi (bisa diganti live lewat tombol `m`, lihat [Kontrol Keyboard](#kontrol-keyboard)).
+
+---
+
+## Tampilan UI
+
+Layar dirancang bersih untuk audiens — **tidak ada teks perintah/nama tombol yang tampil di layar** (semua instruksi keyboard hanya dicetak di terminal operator).
+
+- **Header** — nama state (`DONE`, dst) dan pesan status dalam teks putih polos, progress bar tipis, dan satu **pill status** kecil di kanan atas (dot berwarna + persentase), menggantikan cluster 4-LED yang lama.
+- **Pill status kanan** — muncul begitu "Fase S" terdeteksi, menampilkan **satu** info paling relevan saat itu (prioritas): `LAMPU NYALA` → `VIDEO` / `VIDEO SELESAI` → `TERHUBUNG` → `MENGHUBUNGKAN`. Bergaya pill putih + dot warna + teks gelap.
+- **Indikator "SIAP"** — pill kecil berdenyut halus di bawah layar, muncul hanya saat aksi lanjutan siap dijalankan. Tidak menyebut nama tombol apa pun.
+- **Saat video Plan A diputar** — seluruh header dan pill status **disembunyikan total**, layar full video tanpa toolbar. Muncul lagi otomatis setelah video selesai/dihentikan.
+- **Window terkunci (`WINDOW_AUTOSIZE`)** — jendela selalu pas dengan ukuran frame dan tidak bisa di-drag-resize manual, mencegah area kosong/abu-abu di sekitar video.
 
 ---
 
 ## Kontrol Keyboard
 
+Instruksi tombol **hanya dicetak di terminal**, tidak pernah ditampilkan di layar video.
+
 | Tombol | Fungsi |
 |---|---|
 | `q` | Keluar dari program |
-| `r` | Reset seluruh sistem (gesture, NDVI, koneksi, video, lampu) ke kondisi awal |
-| **SPASI** | Jalankan aksi lanjutan (Video atau Lampu, sesuai pilihan di awal) — aktif setelah progress 100% & `Connected` |
+| `r` | Reset seluruh sistem (gesture, skor, koneksi, video, lampu) ke kondisi awal |
+| **SPASI** | Jalankan aksi lanjutan (Video atau Lampu, sesuai mode aktif) — aktif setelah progress 100% & `Connected` |
+| `m` | Ganti mode aksi lanjutan (Video ↔ Lampu) kapan saja sebelum ditekan — juga aktif lagi setelah video di-stop manual (`s`) |
 | `s` | Stop video Plan A yang sedang berjalan |
 | `v` | Putar ulang video Plan A dari awal |
+| `d` | Toggle info debug gesture mentah (L/R/Score) — disembunyikan secara default, untuk rehearsal/troubleshooting |
+
+**Contoh skenario di panggung:** video jalan tapi mau ganti ke lampu di tengah demo → tekan `s` (stop video) → `m` (ganti mode ke LAMPU) → SPASI (kirim ON ke lampu).
 
 ---
 
@@ -183,7 +203,8 @@ ACTION_KEY  = " "              # tombol tunggal untuk aksi lanjutan (default: sp
 - [ ] Taruh video di `assets/promo.mp4` jika Plan A dipakai
 - [ ] Tentukan `CONNECTION_MODE`: `SIMULATED` (aman, tanpa hardware) atau `MQTT` (kalau ESP32 sudah siap)
 - [ ] Tes gesture "S" di lokasi & pencahayaan acara sebenarnya
-- [ ] Tes tombol `q` / `r` / SPASI / `s` / `v`
+- [ ] Tes tombol `q` / `r` / SPASI / `m` / `s` / `v` / `d`
+- [ ] Coba skenario ganti mode di tengah demo (`s` → `m` → SPASI)
 
 ---
 
