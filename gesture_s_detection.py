@@ -555,52 +555,31 @@ def draw_overlay(frame, system_output, debug_info, show_debug=False):
 
 def draw_smart_agri_panel(frame, ndvi_value, ndvi_label, ndvi_color, is_connected,
                            video_status, lamp_on):
-    """Panel status ringkas: skor, koneksi, video, lampu (FR-02, FR-03). Tanpa teks command."""
+    """Satu pill status minimal (gaya 'LIVE'): dot warna + satu status paling relevan saat ini."""
     h, w = frame.shape[:2]
-    panel_w, panel_h = 216, 148
-    px, py = w - panel_w - 14, 64
 
-    # Kartu dengan sudut membulat semu (radius kecil di tiap pojok)
-    overlay = frame.copy()
-    r = 10
-    cv2.rectangle(overlay, (px + r, py), (px + panel_w - r, py + panel_h), (20, 20, 25), -1)
-    cv2.rectangle(overlay, (px, py + r), (px + panel_w, py + panel_h - r), (20, 20, 25), -1)
-    for cx, cy in [(px + r, py + r), (px + panel_w - r, py + r),
-                   (px + r, py + panel_h - r), (px + panel_w - r, py + panel_h - r)]:
-        cv2.circle(overlay, (cx, cy), r, (20, 20, 25), -1, cv2.LINE_AA)
-    cv2.addWeighted(overlay, 0.8, frame, 0.2, 0, frame)
-    cv2.rectangle(frame, (px, py), (px + panel_w, py + panel_h), (65, 65, 72), 1, cv2.LINE_AA)
-
-    cv2.putText(frame, "SYSTEM STATUS", (px + 14, py + 22), FONT, 0.42, (150, 150, 158), 1, cv2.LINE_AA)
-    cv2.line(frame, (px + 14, py + 30), (px + panel_w - 14, py + 30), (55, 55, 62), 1, cv2.LINE_AA)
-
-    # Skor
-    cv2.putText(frame, f"{ndvi_value:.2f}", (px + 14, py + 60), FONT, 0.85, ndvi_color, 1, cv2.LINE_AA)
-    cv2.putText(frame, ndvi_label, (px + 14, py + 76), FONT, 0.38, ndvi_color, 1, cv2.LINE_AA)
-
-    # Status koneksi
-    conn_col = (0, 220, 100) if is_connected else (0, 180, 255)
-    conn_txt = "Terhubung" if is_connected else "Menghubungkan"
-    cv2.circle(frame, (px + 18, py + 96), 4, conn_col, -1, cv2.LINE_AA)
-    cv2.putText(frame, conn_txt, (px + 30, py + 100), FONT, 0.38, conn_col, 1, cv2.LINE_AA)
-
-    # Video
-    video_col = (0, 220, 100) if video_status == "ON" else (
-        (0, 200, 255) if video_status == "SELESAI" else (110, 110, 116))
-    cv2.circle(frame, (px + 18, py + 116), 4, video_col, -1, cv2.LINE_AA)
-    cv2.putText(frame, f"Video  {video_status.title()}", (px + 30, py + 120),
-                FONT, 0.38, video_col, 1, cv2.LINE_AA)
-
-    # Lampu — bohlam kecil dengan glow saat nyala
-    lamp_cx, lamp_cy = px + 18, py + 136
-    lamp_col = (0, 220, 255) if lamp_on else (90, 90, 96)
     if lamp_on:
-        glow = frame.copy()
-        cv2.circle(glow, (lamp_cx, lamp_cy), 10, lamp_col, -1, cv2.LINE_AA)
-        cv2.addWeighted(glow, 0.35, frame, 0.65, 0, frame)
-    cv2.circle(frame, (lamp_cx, lamp_cy), 4, lamp_col, -1, cv2.LINE_AA)
-    cv2.putText(frame, f"Lampu  {'Nyala' if lamp_on else 'Mati'}", (px + 30, py + 140),
-                FONT, 0.38, lamp_col, 1, cv2.LINE_AA)
+        text, dot_col = "LAMPU NYALA", (0, 170, 255)
+    elif video_status == "ON":
+        text, dot_col = "VIDEO", (60, 180, 60)
+    elif video_status == "SELESAI":
+        text, dot_col = "VIDEO SELESAI", (150, 150, 150)
+    elif is_connected:
+        text, dot_col = "TERHUBUNG", (60, 180, 60)
+    else:
+        text, dot_col = "MENGHUBUNGKAN", (0, 150, 230)
+
+    (tw, th), _ = cv2.getTextSize(text, FONT, 0.42, 1)
+    pad_l, pad_r, pad_y = 26, 14, 8
+    pill_w = tw + pad_l + pad_r
+    pill_h = th + pad_y * 2
+    x2, y1 = w - 14, 64
+    x1, y2 = x2 - pill_w, y1 + pill_h
+
+    cv2.rectangle(frame, (x1, y1), (x2, y2), (248, 248, 248), -1, cv2.LINE_AA)
+    dot_cx, dot_cy = x1 + 15, (y1 + y2) // 2
+    cv2.circle(frame, (dot_cx, dot_cy), 5, dot_col, -1, cv2.LINE_AA)
+    cv2.putText(frame, text, (x1 + pad_l, y2 - pad_y), FONT, 0.42, (25, 25, 25), 1, cv2.LINE_AA)
 
     return frame
 
