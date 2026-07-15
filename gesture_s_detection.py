@@ -602,6 +602,9 @@ def choose_action_mode():
     return ACTION_MODE
 
 
+WINDOW_NAME = "AI Gesture Activation - Gesture S"
+
+
 def main():
     action_mode = choose_action_mode()
 
@@ -609,6 +612,10 @@ def main():
     cap = cv2.VideoCapture(0)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  2000)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1040)
+
+    # AUTOSIZE -> window tidak bisa di-drag-resize manual, selalu pas dengan
+    # ukuran frame yang ditampilkan (mencegah area abu-abu kosong sisa resize).
+    cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_AUTOSIZE)
 
     system  = GestureActivationSystem()
     ndvi    = NDVISimulator()
@@ -725,7 +732,7 @@ def main():
             cv2.circle(frame, (x0 + 14, (y0 + y1) // 2), 3, badge_c, -1, cv2.LINE_AA)
             cv2.putText(frame, label, (bx - tw // 2 + 6, by), FONT, 0.5, badge_c, 1, cv2.LINE_AA)
 
-        cv2.imshow("AI Gesture Activation - Gesture S", frame)
+        cv2.imshow(WINDOW_NAME, frame)
 
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
