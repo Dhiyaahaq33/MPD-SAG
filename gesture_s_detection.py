@@ -18,6 +18,7 @@ import numpy as np
 import time
 import os
 import random
+import math
 
 try:
     import paho.mqtt.client as mqtt
@@ -493,13 +494,18 @@ STATE_COLORS = {
 }
 
 
-def draw_overlay(frame, system_output, debug_info):
+FONT = cv2.FONT_HERSHEY_DUPLEX
+
+
+def draw_overlay(frame, system_output, debug_info, show_debug=False):
+    """Header minimalis: state, progress tipis, indikator LED kecil. Tanpa teks instruksi/command."""
     h, w = frame.shape[:2]
 
-    # ── Panel background ──
+    # ── Panel atas, flat & translucent ──
     overlay = frame.copy()
-    cv2.rectangle(overlay, (0, 0), (w, 90), (10, 10, 10), -1)
-    cv2.addWeighted(overlay, 0.7, frame, 0.3, 0, frame)
+    cv2.rectangle(overlay, (0, 0), (w, 74), (16, 16, 20), -1)
+    cv2.addWeighted(overlay, 0.72, frame, 0.28, 0, frame)
+    cv2.line(frame, (0, 74), (w, 74), (55, 55, 62), 1, cv2.LINE_AA)
 
     state    = system_output["state"]
     progress = system_output["progress"]
@@ -507,96 +513,91 @@ def draw_overlay(frame, system_output, debug_info):
     message  = system_output["message"]
     color    = STATE_COLORS.get(state, (255, 255, 255))
 
-    # ── Status teks ──
-    cv2.putText(frame, f"STATE: {state}", (10, 25),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-    cv2.putText(frame, message, (10, 55),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (220, 220, 220), 1)
+    cv2.putText(frame, state, (16, 30), FONT, 0.7, color, 1, cv2.LINE_AA)
+    cv2.putText(frame, message, (16, 52), FONT, 0.45, (185, 185, 190), 1, cv2.LINE_AA)
 
-    # ── Progress Bar ──
-    bar_x, bar_y, bar_w, bar_h = 10, 65, w - 20, 14
-    cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), (50, 50, 50), -1)
+    # ── Progress bar tipis ──
+    bar_x, bar_y, bar_w, bar_h = 16, 62, w - 210, 5
+    cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), (42, 42, 48), -1, cv2.LINE_AA)
     fill = int(bar_w * progress / 100)
     if fill > 0:
-        cv2.rectangle(frame, (bar_x, bar_y), (bar_x + fill, bar_y + bar_h), color, -1)
-    cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), (200, 200, 200), 1)
-    cv2.putText(frame, f"{progress:.1f}%", (bar_x + bar_w + 5, bar_y + 12),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
+        cv2.rectangle(frame, (bar_x, bar_y), (bar_x + fill, bar_y + bar_h), color, -1, cv2.LINE_AA)
+    cv2.putText(frame, f"{progress:.0f}%", (bar_x + bar_w + 10, bar_y + 9),
+                FONT, 0.4, (185, 185, 190), 1, cv2.LINE_AA)
 
-    # ── LED Indikator (4 lingkaran) ──
-    led_labels  = ["GREEN\n0-25%", "BLUE\n25-50%", "YELLOW\n50-75%", "RED\n75-100%"]
-    led_keys    = ["GREEN", "BLUE", "YELLOW", "RED"]
-    led_cx_start = w - 180
-    for i, (key, lbl) in enumerate(zip(led_keys, led_labels)):
-        cx  = led_cx_start + i * 45
-        cy  = 40
-        col = LED_COLORS[key] if led == key else (40, 40, 40)
-        cv2.circle(frame, (cx, cy), 15, col, -1)
-        cv2.circle(frame, (cx, cy), 15, (200, 200, 200), 1)
+    # ── Indikator LED — titik kecil dengan glow lembut saat aktif ──
+    led_keys = ["GREEN", "BLUE", "YELLOW", "RED"]
+    led_cx_start = w - 150
+    for i, key in enumerate(led_keys):
+        cx, cy = led_cx_start + i * 34, 28
+        active = (led == key)
+        col = LED_COLORS[key] if active else (50, 50, 56)
+        if active:
+            glow = frame.copy()
+            cv2.circle(glow, (cx, cy), 10, col, -1, cv2.LINE_AA)
+            cv2.addWeighted(glow, 0.35, frame, 0.65, 0, frame)
+        cv2.circle(frame, (cx, cy), 5, col, -1, cv2.LINE_AA)
 
-    # ── Debug info gesture ──
-    if debug_info and "total_score" in debug_info:
-        y0 = h - 100
-        cv2.putText(frame, f"L-C: {'OK' if debug_info['left_c'] else 'X'} ({debug_info['left_score']})",
-                    (10, y0), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (180, 255, 180), 1)
-        cv2.putText(frame, f"R-C: {'OK' if debug_info['right_c'] else 'X'} ({debug_info['right_score']})",
-                    (10, y0 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (180, 180, 255), 1)
-        cv2.putText(frame, f"R>L: {'OK' if debug_info['right_above'] else 'X'}  Gap:{debug_info['vertical_gap']}",
-                    (10, y0 + 40), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 180), 1)
-        cv2.putText(frame, f"Score: {debug_info['total_score']}",
-                    (10, y0 + 60), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 200, 100), 1)
-
-    # ── Petunjuk gesture ──
-    cv2.putText(frame, "Gesture S: Tangan Kanan [C-inv] di atas | Tangan Kiri [C] di bawah",
-                (10, h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (160, 160, 160), 1)
+    # ── Info debug (opsional, toggle via tombol 'd' saat rehearsal) ──
+    if show_debug and debug_info and "total_score" in debug_info:
+        cv2.putText(
+            frame,
+            f"L:{'OK' if debug_info['left_c'] else '-'}  R:{'OK' if debug_info['right_c'] else '-'}  "
+            f"Pos:{'OK' if debug_info['right_above'] else '-'}  Score:{debug_info['total_score']}",
+            (16, h - 16), FONT, 0.4, (140, 210, 180), 1, cv2.LINE_AA,
+        )
 
     return frame
 
 
 def draw_smart_agri_panel(frame, ndvi_value, ndvi_label, ndvi_color, is_connected,
                            video_status, lamp_on):
-    """UI Smart Agriculture: NDVI + status koneksi + status Plan A/Alternatif (FR-02, FR-03)."""
+    """Panel status ringkas: skor, koneksi, video, lampu (FR-02, FR-03). Tanpa teks command."""
     h, w = frame.shape[:2]
-    panel_w, panel_h = 230, 155
-    px, py = w - panel_w - 10, 100
+    panel_w, panel_h = 216, 148
+    px, py = w - panel_w - 14, 90
 
+    # Kartu dengan sudut membulat semu (radius kecil di tiap pojok)
     overlay = frame.copy()
-    cv2.rectangle(overlay, (px, py), (px + panel_w, py + panel_h), (10, 10, 10), -1)
-    cv2.addWeighted(overlay, 0.75, frame, 0.25, 0, frame)
-    cv2.rectangle(frame, (px, py), (px + panel_w, py + panel_h), (200, 200, 200), 1)
+    r = 10
+    cv2.rectangle(overlay, (px + r, py), (px + panel_w - r, py + panel_h), (20, 20, 25), -1)
+    cv2.rectangle(overlay, (px, py + r), (px + panel_w, py + panel_h - r), (20, 20, 25), -1)
+    for cx, cy in [(px + r, py + r), (px + panel_w - r, py + r),
+                   (px + r, py + panel_h - r), (px + panel_w - r, py + panel_h - r)]:
+        cv2.circle(overlay, (cx, cy), r, (20, 20, 25), -1, cv2.LINE_AA)
+    cv2.addWeighted(overlay, 0.8, frame, 0.2, 0, frame)
+    cv2.rectangle(frame, (px, py), (px + panel_w, py + panel_h), (65, 65, 72), 1, cv2.LINE_AA)
 
-    cv2.putText(frame, "SYSTEM STATUS", (px + 10, py + 20),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
+    cv2.putText(frame, "SYSTEM STATUS", (px + 14, py + 22), FONT, 0.42, (150, 150, 158), 1, cv2.LINE_AA)
+    cv2.line(frame, (px + 14, py + 30), (px + panel_w - 14, py + 30), (55, 55, 62), 1, cv2.LINE_AA)
 
-    # Skor status (data teknisnya tetap NDVI simulasi, wording generik)
-    cv2.putText(frame, f"SKOR: {ndvi_value:.2f}", (px + 10, py + 45),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, ndvi_color, 2)
-    cv2.putText(frame, ndvi_label, (px + 10, py + 63),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.4, ndvi_color, 1)
+    # Skor
+    cv2.putText(frame, f"{ndvi_value:.2f}", (px + 14, py + 60), FONT, 0.85, ndvi_color, 1, cv2.LINE_AA)
+    cv2.putText(frame, ndvi_label, (px + 14, py + 76), FONT, 0.38, ndvi_color, 1, cv2.LINE_AA)
 
     # Status koneksi
     conn_col = (0, 220, 100) if is_connected else (0, 180, 255)
-    conn_txt = "Connected" if is_connected else "Connecting..."
-    cv2.circle(frame, (px + 15, py + 80), 5, conn_col, -1)
-    cv2.putText(frame, f"IoT: {conn_txt}", (px + 28, py + 84),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.42, conn_col, 1)
+    conn_txt = "Terhubung" if is_connected else "Menghubungkan"
+    cv2.circle(frame, (px + 18, py + 96), 4, conn_col, -1, cv2.LINE_AA)
+    cv2.putText(frame, conn_txt, (px + 30, py + 100), FONT, 0.38, conn_col, 1, cv2.LINE_AA)
 
-    # Plan A (video)
+    # Video
     video_col = (0, 220, 100) if video_status == "ON" else (
-        (0, 200, 255) if video_status == "SELESAI" else (120, 120, 120))
-    cv2.putText(frame, f"Plan A Video: {video_status}", (px + 10, py + 100),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.4, video_col, 1)
+        (0, 200, 255) if video_status == "SELESAI" else (110, 110, 116))
+    cv2.circle(frame, (px + 18, py + 116), 4, video_col, -1, cv2.LINE_AA)
+    cv2.putText(frame, f"Video  {video_status.title()}", (px + 30, py + 120),
+                FONT, 0.38, video_col, 1, cv2.LINE_AA)
 
-    # Alternatif (lampu) — digambar sebagai bohlam biar keliatan jelas nyala/mati
-    bulb_cx, bulb_cy = px + 18, py + 122
+    # Lampu — bohlam kecil dengan glow saat nyala
+    lamp_cx, lamp_cy = px + 18, py + 136
+    lamp_col = (0, 220, 255) if lamp_on else (90, 90, 96)
     if lamp_on:
-        cv2.circle(frame, (bulb_cx, bulb_cy), 12, (0, 220, 255), -1)   # glow luar
-        cv2.circle(frame, (bulb_cx, bulb_cy), 7,  (255, 255, 255), -1)  # inti terang
-    else:
-        cv2.circle(frame, (bulb_cx, bulb_cy), 7, (60, 60, 60), -1)
-        cv2.circle(frame, (bulb_cx, bulb_cy), 7, (150, 150, 150), 1)
-    cv2.putText(frame, f"Alt. Lampu: {'ON' if lamp_on else 'OFF'}", (px + 35, py + 127),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 220, 255) if lamp_on else (150, 150, 150), 1)
+        glow = frame.copy()
+        cv2.circle(glow, (lamp_cx, lamp_cy), 10, lamp_col, -1, cv2.LINE_AA)
+        cv2.addWeighted(glow, 0.35, frame, 0.65, 0, frame)
+    cv2.circle(frame, (lamp_cx, lamp_cy), 4, lamp_col, -1, cv2.LINE_AA)
+    cv2.putText(frame, f"Lampu  {'Nyala' if lamp_on else 'Mati'}", (px + 30, py + 140),
+                FONT, 0.38, lamp_col, 1, cv2.LINE_AA)
 
     return frame
 
@@ -636,11 +637,13 @@ def main():
     lamp_on         = False
     action_done     = False   # True setelah tombol aksi ditekan (video mulai / lampu nyala)
     video_manual_stop = False  # True kalau video dihentikan manual lewat 's' (jangan auto-play lagi)
+    show_debug      = False   # info gesture mentah (L/R/Score) - disembunyikan dari layar audiens by default
 
     print("=== AI Gesture Activation System (Smart Agriculture) ===")
     print(f"Mode aksi lanjutan sesi ini: {action_mode}  (tekan 'm' kapan saja untuk ganti mode)")
     print(f"Tekan [{ACTION_KEY.upper() if ACTION_KEY != ' ' else 'SPASI'}] untuk jalankan aksi setelah verifikasi 100% & terhubung")
-    print("Tombol lain: 'q' keluar | 'r' reset | 'm' ganti mode Video/Lampu | 's' stop video | 'v' putar ulang video")
+    print("Tombol lain: 'q' keluar | 'r' reset | 'm' ganti mode Video/Lampu | 's' stop video | 'v' putar ulang video | 'd' toggle info debug")
+    print("(Teks perintah/tombol TIDAK ditampilkan di layar utama — hanya di terminal ini, untuk operator.)")
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -704,7 +707,7 @@ def main():
                     frame = cv2.addWeighted(frame, 0.35, vframe, 0.65, 0)
 
         # ── Overlay visual utama (state/progress/LED) ──
-        frame = draw_overlay(frame, output, debug_info)
+        frame = draw_overlay(frame, output, debug_info, show_debug=show_debug)
 
         # ── Panel Smart Agriculture (NDVI, koneksi, Plan A/Alternatif) ──
         if phase_s_seen:
@@ -722,14 +725,21 @@ def main():
                 is_connected, video_status, lamp_on,
             )
 
-        # ── Prompt tombol aksi tunggal (Video ATAU Lampu, sesuai action_mode saat ini) ──
-        action_label = "VIDEO (Plan A)" if action_mode == "VIDEO" else "LAMPU (Alternatif)"
+        # ── Indikator "siap" — pill minimal berdenyut, tanpa nama tombol/perintah ──
         if action_ready:
-            key_label = "SPASI" if ACTION_KEY == " " else ACTION_KEY.upper()
-            prompt = f"Tekan [{key_label}] untuk jalankan: {action_label}   ( 'm' = ganti mode )"
-            hh, ww = frame.shape[:2]
-            cv2.putText(frame, prompt, (ww // 2 - 280, hh // 2 + 130),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+            pulse   = 0.5 + 0.5 * math.sin(time.time() * 3.0)
+            badge_c = (0, int(200 + 55 * pulse), 180)
+            hh, ww  = frame.shape[:2]
+            label   = "SIAP"
+            (tw, th), _ = cv2.getTextSize(label, FONT, 0.5, 1)
+            bx, by  = ww // 2, hh - 34
+            pad     = 16
+            x0, y0  = bx - tw // 2 - pad, by - th - 10
+            x1, y1  = bx + tw // 2 + pad, by + 10
+            cv2.rectangle(frame, (x0, y0), (x1, y1), (18, 18, 22), -1, cv2.LINE_AA)
+            cv2.rectangle(frame, (x0, y0), (x1, y1), badge_c, 1, cv2.LINE_AA)
+            cv2.circle(frame, (x0 + 14, (y0 + y1) // 2), 3, badge_c, -1, cv2.LINE_AA)
+            cv2.putText(frame, label, (bx - tw // 2 + 6, by), FONT, 0.5, badge_c, 1, cv2.LINE_AA)
 
         cv2.imshow("AI Gesture Activation - Gesture S", frame)
 
@@ -768,6 +778,9 @@ def main():
             video.start()
             video_manual_stop = False
             print("[VIDEO] Diputar ulang dari awal.")
+        elif key == ord('d'):
+            show_debug = not show_debug
+            print(f"[DEBUG] Info gesture mentah: {'ditampilkan' if show_debug else 'disembunyikan'}")
 
     video.stop()
     cap.release()
